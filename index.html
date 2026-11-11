@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Birthday camera</title>
+<title>Рођенданска камера</title>
 <style>
 :root{--body:#1c1b1a;--film:#f0b429;--paper:#f7f3ea;--dim:#8d877c}
 *{box-sizing:border-box}
@@ -24,6 +24,11 @@ button{font:inherit;cursor:pointer}
 .shutter:active{transform:scale(.92)}
 .shutter:disabled{opacity:.4}
 .shutter:focus-visible,.start:focus-visible{outline:3px solid var(--paper);outline-offset:4px}
+.flip{position:absolute;right:12px;bottom:12px;width:48px;height:48px;border-radius:50%;border:0;background:rgba(28,27,26,.6);color:var(--paper);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.flip:active{transform:scale(.92)}
+.flip:disabled{opacity:.4}
+.flip:focus-visible{outline:3px solid var(--paper);outline-offset:2px}
+.flip svg{width:26px;height:26px}
 .msg{font-size:.9rem;color:var(--dim);min-height:1.2em;text-align:center;padding:0 20px}
 .center{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:30px;gap:14px}
 .center h2{font-size:1.6rem;margin:0}.center p{margin:0;color:var(--dim);max-width:24em;line-height:1.5}
@@ -37,36 +42,37 @@ input.name:focus-visible{outline:3px solid var(--film)}
 <body>
 <header>
   <h1 id="title"></h1>
-  <div class="count"><span id="left">5</span><small>shots left</small></div>
+  <div class="count"><span id="left">5</span><small>преостало снимака</small></div>
 </header>
 
 <section id="intro" class="center">
-  <h2>You get 5 photos.</h2>
-  <p>Take them with this camera. You can't retake or see them, and only the birthday host will see everyone's pictures later. Make them count.</p>
-  <input class="name" id="fn" placeholder="First name" autocomplete="given-name" maxlength="40">
-  <input class="name" id="ln" placeholder="Last name" autocomplete="family-name" maxlength="40">
+  <h2>Имате 5 фотографија.</h2>
+  <p>Сликајте овом камером. Снимке не можете поновити нити погледати, а само домаћин рођендана ће касније видети слике свих гостију. Искористите их паметно.</p>
+  <input class="name" id="fn" placeholder="Име" autocomplete="given-name" maxlength="40">
+  <input class="name" id="ln" placeholder="Презиме" autocomplete="family-name" maxlength="40">
   <div class="msg" id="nerr"></div>
-  <button class="start" id="start">Open camera</button>
+  <button class="start" id="start">Отвори камеру</button>
 </section>
 
 <section id="cam" class="hide" style="display:flex;flex-direction:column;flex:1;min-height:0">
-  <div class="view"><video id="v" playsinline muted autoplay></video><div class="flash" id="fl"></div></div>
+  <div class="view"><video id="v" playsinline muted autoplay></video><div class="flash" id="fl"></div>
+    <button class="flip hide" id="flip" aria-label="Окрени камеру" title="Окрени камеру"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3.2l-1.4-2H8.6L7.2 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M15.5 12.5a3.5 3.5 0 0 0-6.2-2.2M8.5 13.5a3.5 3.5 0 0 0 6.2 2.2"/><path d="M9.5 8.3v2.3H7.2M14.5 17.7v-2.3h2.3"/></svg></button></div>
   <div class="bar">
-    <button class="shutter" id="shot" aria-label="Take photo"></button>
+    <button class="shutter" id="shot" aria-label="Усликај"></button>
     <div class="msg" id="msg"></div>
   </div>
 </section>
 
 <section id="fallback" class="hide center">
-  <h2>Camera not available</h2>
-  <p>Allow camera access in your browser, or take the photo with your phone's camera instead.</p>
-  <label class="start" for="file">Take photo</label>
+  <h2>Камера није доступна</h2>
+  <p>Дозволите приступ камери у прегледачу или уместо тога усликајте камером свог телефона.</p>
+  <label class="start" for="file">Усликај</label>
   <input type="file" id="file" accept="image/*" capture="environment">
 </section>
 
 <section id="done" class="hide center">
-  <h2>That's all 5. Thank you!</h2>
-  <p>Your photos are with the host. Enjoy the party.</p>
+  <h2>То је свих 5. Хвала!</h2>
+  <p>Ваше фотографије су код домаћина. Уживајте у слављу.</p>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -94,11 +100,25 @@ async function sync() {
 }
 function stopCam(){ stream && stream.getTracks().forEach(t => t.stop()); }
 
+let facing = "environment";
+async function startStream() {
+  const next = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 } }, audio: false });
+  stopCam();
+  stream = next;
+  $("v").srcObject = stream;
+  $("v").style.transform = facing === "user" ? "scaleX(-1)" : "";
+}
+async function updateFlip() {
+  try {
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    $("flip").classList.toggle("hide", cams.length < 2);
+  } catch { $("flip").classList.add("hide"); }
+}
 async function openCam() {
   if (!(await sync())) return;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 } }, audio: false });
-    $("v").srcObject = stream; show("cam");
+    await startStream();
+    show("cam"); updateFlip();
   } catch { show("fallback"); }
 }
 
@@ -110,22 +130,31 @@ function toBlob(src, w, h) {
 }
 
 async function save(blob) {
-  if (busy) return; busy = true; $("shot").disabled = true; $("msg").textContent = "Saving...";
+  if (busy) return; busy = true; $("shot").disabled = true; $("msg").textContent = "Чување...";
   const path = `${gid}/${Date.now()}.jpg`;
   const { error: e1 } = await sb.from("photos").insert({ guest_id: gid, path, guest_name: guestName });
-  if (e1) { $("msg").textContent = "Limit reached."; await sync(); busy = false; return; }
+  if (e1) { $("msg").textContent = "Достигнут је лимит."; await sync(); busy = false; return; }
   used++; localStorage.setItem("used", used); render();
   let err; for (let i = 0; i < 3; i++) { ({ error: err } = await sb.storage.from("party").upload(path, blob, { contentType: "image/jpeg" })); if (!err) break; }
-  $("msg").textContent = err ? "Upload failed. Check your connection." : "";
+  $("msg").textContent = err ? "Отпремање није успело. Проверите интернет везу." : "";
   busy = false; $("shot").disabled = false;
   if (used >= CFG.SHOTS) { stopCam(); show("done"); }
 }
 
 $("start").onclick = () => {
   const a = $("fn").value.trim(), b = $("ln").value.trim();
-  if (!a || !b) { $("nerr").textContent = "Enter your first and last name."; return; }
+  if (!a || !b) { $("nerr").textContent = "Унесите своје име и презиме."; return; }
   guestName = a + " " + b; localStorage.setItem("gname", guestName); $("nerr").textContent = "";
   openCam();
+};
+$("flip").onclick = async () => {
+  if (busy) return;
+  const prev = facing;
+  facing = facing === "environment" ? "user" : "environment";
+  $("flip").disabled = true;
+  try { await startStream(); $("msg").textContent = ""; }
+  catch { facing = prev; $("msg").textContent = "Друга камера није доступна."; }
+  $("flip").disabled = false;
 };
 $("shot").onclick = async () => {
   const v = $("v"); if (!v.videoWidth) return;
