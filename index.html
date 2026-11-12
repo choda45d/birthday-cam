@@ -29,6 +29,14 @@ button{font:inherit;cursor:pointer}
 .flip:disabled{opacity:.4}
 .flip:focus-visible{outline:3px solid var(--paper);outline-offset:2px}
 .flip svg{width:26px;height:26px}
+.row{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:340px;padding:0 20px}
+.gal{width:56px;height:56px;border-radius:50%;border:2px solid var(--dim);background:transparent;color:var(--paper);display:flex;align-items:center;justify-content:center}
+.gal:active{transform:scale(.92)}
+.gal:disabled{opacity:.4}
+.gal:focus-visible{outline:3px solid var(--paper);outline-offset:3px}
+.gal svg{width:28px;height:28px}
+.spacer{width:56px;height:56px}
+.alt{background:transparent;color:var(--paper);border:2px solid var(--dim);border-radius:999px;padding:12px 26px;font-weight:700;font-size:1rem}
 .msg{font-size:.9rem;color:var(--dim);min-height:1.2em;text-align:center;padding:0 20px}
 .center{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:30px;gap:14px}
 .center h2{font-size:1.6rem;margin:0}.center p{margin:0;color:var(--dim);max-width:24em;line-height:1.5}
@@ -47,7 +55,7 @@ input.name:focus-visible{outline:3px solid var(--film)}
 
 <section id="intro" class="center">
   <h2>Имате 5 фотографија.</h2>
-  <p>Сликајте овом камером. Снимке не можете поновити нити погледати, а само домаћин рођендана ће касније видети слике свих гостију. Искористите их паметно.</p>
+  <p>Сликајте овом камером или додајте слике из галерије — укупно највише 5. Снимке не можете поновити нити погледати, а само домаћин рођендана ће касније видети слике свих гостију. Искористите их паметно.</p>
   <input class="name" id="fn" placeholder="Име" autocomplete="given-name" maxlength="40">
   <input class="name" id="ln" placeholder="Презиме" autocomplete="family-name" maxlength="40">
   <div class="msg" id="nerr"></div>
@@ -58,7 +66,11 @@ input.name:focus-visible{outline:3px solid var(--film)}
   <div class="view"><video id="v" playsinline muted autoplay></video><div class="flash" id="fl"></div>
     <button class="flip hide" id="flip" aria-label="Окрени камеру" title="Окрени камеру"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3.2l-1.4-2H8.6L7.2 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M15.5 12.5a3.5 3.5 0 0 0-6.2-2.2M8.5 13.5a3.5 3.5 0 0 0 6.2 2.2"/><path d="M9.5 8.3v2.3H7.2M14.5 17.7v-2.3h2.3"/></svg></button></div>
   <div class="bar">
-    <button class="shutter" id="shot" aria-label="Усликај"></button>
+    <div class="row">
+      <button class="gal" id="galbtn" aria-label="Изабери из галерије" title="Изабери из галерије"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg></button>
+      <button class="shutter" id="shot" aria-label="Усликај"></button>
+      <div class="spacer"></div>
+    </div>
     <div class="msg" id="msg"></div>
   </div>
 </section>
@@ -68,6 +80,8 @@ input.name:focus-visible{outline:3px solid var(--film)}
   <p>Дозволите приступ камери у прегледачу или уместо тога усликајте камером свог телефона.</p>
   <label class="start" for="file">Усликај</label>
   <input type="file" id="file" accept="image/*" capture="environment">
+  <button class="alt" id="galbtn2">Изабери из галерије</button>
+  <div class="msg" id="fmsg"></div>
 </section>
 
 <section id="done" class="hide center">
@@ -75,6 +89,7 @@ input.name:focus-visible{outline:3px solid var(--film)}
   <p>Ваше фотографије су код домаћина. Уживајте у слављу.</p>
 </section>
 
+<input type="file" id="gal" accept="image/*" multiple>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
@@ -129,16 +144,50 @@ function toBlob(src, w, h) {
   return new Promise(r => c.toBlob(r, "image/jpeg", .82));
 }
 
+const note = t => { $("msg").textContent = t; $("fmsg").textContent = t; };
+const setBusy = b => { busy = b; $("shot").disabled = b; $("galbtn").disabled = b; $("galbtn2").disabled = b; };
+
 async function save(blob) {
-  if (busy) return; busy = true; $("shot").disabled = true; $("msg").textContent = "Чување...";
-  const path = `${gid}/${Date.now()}.jpg`;
+  if (busy) return false; setBusy(true); note("Чување...");
+  const path = `${gid}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`;
   const { error: e1 } = await sb.from("photos").insert({ guest_id: gid, path, guest_name: guestName });
-  if (e1) { $("msg").textContent = "Достигнут је лимит."; await sync(); busy = false; return; }
+  if (e1) { note("Достигнут је лимит."); await sync(); setBusy(false); return false; }
   used++; localStorage.setItem("used", used); render();
   let err; for (let i = 0; i < 3; i++) { ({ error: err } = await sb.storage.from("party").upload(path, blob, { contentType: "image/jpeg" })); if (!err) break; }
-  $("msg").textContent = err ? "Отпремање није успело. Проверите интернет везу." : "";
-  busy = false; $("shot").disabled = false;
+  note(err ? "Отпремање није успело. Проверите интернет везу." : "");
+  setBusy(false);
   if (used >= CFG.SHOTS) { stopCam(); show("done"); }
+  return !err;
+}
+
+async function decode(f) {
+  try { return await createImageBitmap(f, { imageOrientation: "from-image" }); }
+  catch { return await createImageBitmap(f); }
+}
+
+// Слике из галерије: деле исто ограничење као и камера (укупно CFG.SHOTS)
+async function addFiles(files) {
+  if (busy) return;
+  if (!(await sync())) return;
+  const left = CFG.SHOTS - used;
+  let list = [...files];
+  if (!list.length) return;
+  const extra = list.length > left;
+  if (extra) list = list.slice(0, left);
+  let ok = 0, bad = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (used >= CFG.SHOTS) break;
+    note(list.length > 1 ? `Чување ${i + 1}/${list.length}...` : "Чување...");
+    let blob;
+    try { const bmp = await decode(list[i]); blob = await toBlob(bmp, bmp.width, bmp.height); }
+    catch { bad++; continue; }
+    if (await save(blob)) ok++; else break;
+  }
+  if (used >= CFG.SHOTS) return;
+  let m = ok ? `Додато слика: ${ok}.` : "";
+  if (bad) m += ` Неке слике нису подржане (${bad}).`;
+  if (extra) m += ` Остало вам је само ${left}, па је додато првих ${left}.`;
+  if (m) note(m.trim());
 }
 
 $("start").onclick = () => {
@@ -162,11 +211,16 @@ $("shot").onclick = async () => {
   save(await toBlob(v, v.videoWidth, v.videoHeight));
 };
 $("file").onchange = async e => {
-  const f = e.target.files[0]; if (!f || busy) return;
-  const bmp = await createImageBitmap(f);
-  await save(await toBlob(bmp, bmp.width, bmp.height));
-  e.target.value = "";
+  const f = e.target.files[0]; e.target.value = ""; if (!f || busy) return;
+  await addFiles([f]);
   if (used < CFG.SHOTS) show("fallback");
+};
+const openGallery = () => { if (!busy) $("gal").click(); };
+$("galbtn").onclick = openGallery;
+$("galbtn2").onclick = openGallery;
+$("gal").onchange = async e => {
+  const fs = [...e.target.files]; e.target.value = "";
+  await addFiles(fs);
 };
 sync().then(ok => { if (!ok) show("done"); });
 </script>
